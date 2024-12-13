@@ -1,0 +1,3 @@
+/home/spyrosgew/Desktop/university/operatingSystems/RPC-Project-Advanced-OS/cmake-build-debug/CMakeFiles/RPC_Project_Advanced_OS.dir
+/home/spyrosgew/Desktop/university/operatingSystems/RPC-Project-Advanced-OS/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/spyrosgew/Desktop/university/operatingSystems/RPC-Project-Advanced-OS/cmake-build-debug/CMakeFiles/rebuild_cache.dir
