@@ -13,3 +13,4 @@ void write_to_file(int fd, int proc_num, pid_t pid);
 void parent_wait();
 
 #endif //FUNCTIONS_H
+//bla
