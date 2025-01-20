@@ -5,12 +5,12 @@
 #ifndef FUNCTIONS_H
 #define FUNCTIONS_H
 
-void initialize();
+void initializeChildSemaphores(int child_amount);
+void initialize_parent_close_lock();
 void check_CLI_args(int argc, char* argv[]);
-int process_initializer(long proc_amount);
-int file_opener(char* file_name);
-void write_to_file(int fd, int proc_num, pid_t pid);
-void parent_wait();
-
+void file_opener(char* file_name);
+int child_creation();
+void write_to_file(int child_number);
+void wait_for_children();
+void cleanup();
 #endif //FUNCTIONS_H
-//bla

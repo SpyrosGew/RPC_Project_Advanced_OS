@@ -4,14 +4,21 @@
 #include "functions.h"
 
 int main(int argc, char* argv[]) {
-    initialize();
     check_CLI_args(argc, argv);
-    int proc_amount = (int) strtol(argv[2], NULL,10);
-    int fd = file_opener(argv[1]);
-    int proc_num = process_initializer(proc_amount);
-    write_to_file(fd, proc_num, getpid());
-    if (proc_num == -1) {
-        parent_wait();
+
+    int child_amount = (int) strtol(argv[2], NULL, 10);
+    char* filename = argv[1];
+    
+    initializeChildSemaphores(child_amount);
+    initialize_parent_close_lock();
+    file_opener(filename);
+    int child_number = child_creation();
+    if (child_number == -1) {
+        wait_for_children();
+        cleanup();
+    } else {
+        write_to_file(child_number);
+        exit(0); // Ensure child exits after writing
     }
     return 0;
 }
