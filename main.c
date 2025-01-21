@@ -10,8 +10,7 @@ int main(int argc, char* argv[]) {
     char* filename = argv[1];
     set_children_amount(children_amount);
     initializeChildSemaphores();
-    initialize_child_info();
-    initialize_parent_close_lock();
+    initialize_message_semaphores();
     initialize_pipes();
     file_opener(filename);
     int child_number = child_creation();
@@ -19,7 +18,9 @@ int main(int argc, char* argv[]) {
         wait_for_children();
         cleanup();
     } else {
-        write_to_file(child_number);
+        initialize_child_info(child_number);
+        update_child_info();
+        write_to_file();
         exit(0); // Ensure child exits after writing
     }
     return 0;
