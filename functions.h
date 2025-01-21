@@ -9,6 +9,7 @@ void set_children_amount(int amount);
 void initializeChildSemaphores();
 void initialize_parent_close_lock();
 void initialize_child_info();
+void initialize_pipes();
 void check_CLI_args(int argc, char* argv[]);
 void file_opener(char* file_name);
 int child_creation();

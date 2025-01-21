@@ -11,7 +11,7 @@
 
 typedef struct {
     int pipe_fd[2];
-    pid_t child_pid;
+    pid_t pid;
     char child_name[20];
 } Child_info;
 
@@ -111,6 +111,10 @@ int child_creation(){
             exit(1);
         }else if(pid == 0){
             return i;  //return the child's number
+        }else{ //child only reads also assosiation child with pipe
+            close(children_info[i].pipe_fd[0]);
+            children_info[i].pid = pid;
+            snprintf(children_info[i].child_name, sizeof(children_info->child_name), "Child_%d", i);
         }           
     }
     return -1; //parent returns -1
