@@ -6,11 +6,13 @@
 int main(int argc, char* argv[]) {
     check_CLI_args(argc, argv);
 
-    int child_amount = (int) strtol(argv[2], NULL, 10);
+    int children_amount = (int) strtol(argv[2], NULL, 10);
     char* filename = argv[1];
-    
-    initializeChildSemaphores(child_amount);
+    set_children_amount(children_amount);
+    initializeChildSemaphores();
+    initialize_child_info();
     initialize_parent_close_lock();
+    initialize_pipes();
     file_opener(filename);
     int child_number = child_creation();
     if (child_number == -1) {

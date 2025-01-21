@@ -9,13 +9,23 @@
 #include <sys/wait.h>
 #include "functions.h"
 
-sem_t *parent_close_lock;
-sem_t **children_locks;
-int fd;
-int children_amount;
+typedef struct {
+    int pipe_fd[2];
+    pid_t child_pid;
+    char child_name[20];
+} Child_info;
 
-void initializeChildSemaphores(int child_amount) {
-    children_amount = child_amount;
+Child_info *children_info = NULL;
+sem_t *parent_close_lock = NULL;
+sem_t **children_locks = NULL;
+int fd = 0;
+int children_amount = 0;
+
+void set_children_amount(int amount){
+    children_amount = amount;
+}
+
+void initializeChildSemaphores() {
     children_locks = malloc(sizeof(sem_t *) * children_amount);
     if (!children_locks) {
         perror("Memory allocation failed");
@@ -24,7 +34,6 @@ void initializeChildSemaphores(int child_amount) {
     for (int i = 0; i < children_amount; i++) {
         char sem_name[20];
         snprintf(sem_name, sizeof(sem_name), "lock_of_child_%d", i);
-        sem_unlink(sem_name);
         children_locks[i] = sem_open(sem_name, O_CREAT | O_EXCL, 0644, (i == 0) ? 1 : 0);
         if (children_locks[i] == SEM_FAILED) {
             perror("Error creating semaphore");
@@ -37,12 +46,30 @@ void initializeChildSemaphores(int child_amount) {
 void initialize_parent_close_lock() {
     char sem_name[20];
     snprintf(sem_name, sizeof(sem_name), "parent_close_lock");
-    sem_unlink(sem_name);
     parent_close_lock = sem_open(sem_name, O_CREAT | O_EXCL, 0644, 0);
     if (parent_close_lock == SEM_FAILED) {
         perror("Error creating semaphore");
         cleanup();
         exit(1);
+    }
+}
+
+void initialize_child_info(){
+    children_info = malloc(sizeof(Child_info) * children_amount);
+    if (!children_info){
+        perror("Child memory allocation failed");
+        cleanup();
+        exit(1);
+    }
+}
+
+void initialize_pipes(){
+    for (int i = 0; i < children_amount; i++){
+        if(pipe(children_info[i].pipe_fd) == -1){
+            perror("Error creating pipes");
+            cleanup();
+            exit(1);
+        }
     }
 }
 
@@ -117,6 +144,9 @@ void cleanup() {
             sem_close(children_locks[i]);
             sem_unlink(sem_name);
         }
+    }
+    if(children_info){
+        free(children_info);
     }
     if (children_locks) {
         free(children_locks);
