@@ -8,6 +8,7 @@ int main(int argc, char* argv[]) {
 
     int children_amount = (int) strtol(argv[2], NULL, 10);
     char* filename = argv[1];
+
     set_children_amount(children_amount);
     initializeChildSemaphores();
     initialize_message_semaphores();
@@ -15,7 +16,7 @@ int main(int argc, char* argv[]) {
     file_opener(filename);
     int child_number = child_creation();
     if (child_number == -1) {
-        wait_for_children();
+        wait_for_children_response();
         cleanup();
     } else {
         initialize_child_info(child_number);

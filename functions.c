@@ -10,7 +10,8 @@
 #include "functions.h"
 
 typedef struct {
-    int pipe_fd[2];
+    int pipe_fd_to_child[2];
+    int pipe_fd_to_parent[2];
     pid_t pid;
     char name[20];
     char message[100];
@@ -21,7 +22,8 @@ typedef struct {
 
 Child_info child_info;
 
-int **children_pipes;
+int **children_pipes; //child read from these
+int **parent_pipes; //parent read from these
 sem_t **children_locks = NULL;
 sem_t **message_locks = NULL;
 int fd = 0;
@@ -39,6 +41,11 @@ void check_CLI_args(int argc, char* argv[]) {
 }
 
 void set_children_amount(int amount){
+    if(amount < 1){
+       printf("Error: No children to create.\n");
+       cleanup();
+       exit(1); 
+    }
     children_amount = amount;
 }
 
@@ -98,6 +105,20 @@ void initialize_pipes() {
             exit(1);
         }
     }
+    parent_pipes = malloc(children_amount * sizeof(int *));
+    if (!parent_pipes) {
+        perror("Memory allocation failed for parent_pipes");
+        cleanup(); // Ensure cleanup if allocation fails
+        exit(1);
+    }
+    for (int i = 0; i < children_amount; i++) {
+        parent_pipes[i] = malloc(2 * sizeof(int));
+        if (!parent_pipes[i] || pipe(parent_pipes[i]) == -1) {
+            perror("Error creating pipes");
+            cleanup(); // Ensure cleanup if pipe creation fails
+            exit(1);
+        }
+    }
 }
 
 
@@ -147,7 +168,8 @@ int child_creation(){
 }
 
 void initialize_child_info(int child_number) {
-    memcpy(child_info.pipe_fd, children_pipes[child_number], sizeof(child_info.pipe_fd));
+    memcpy(child_info.pipe_fd_to_child, children_pipes[child_number], sizeof(child_info.pipe_fd_to_child));
+    memcpy(child_info.pipe_fd_to_parent, parent_pipes[child_number], sizeof(child_info.pipe_fd_to_parent));
     child_info.pid = getpid();
     child_info.children_lock = children_locks[child_number];
     child_info.message_lock = message_locks[child_number];
@@ -156,10 +178,14 @@ void initialize_child_info(int child_number) {
         if (i != child_number) {
             close(children_pipes[i][0]); // Close unused read end
             close(children_pipes[i][1]); // Close unused write end
+            close(parent_pipes[i][1]);
+            close(parent_pipes[i][0]);
         }
         free(children_pipes[i]); // Free pipe memory
+        free(parent_pipes[i]);
     }
     free(children_pipes); // Free the inhereted stuff
+    free(parent_pipes);
     free(message_locks);
     message_locks = NULL;
     children_pipes = NULL;
@@ -168,7 +194,7 @@ void initialize_child_info(int child_number) {
 void update_child_info(){
     sem_wait(child_info.message_lock);
     char buffer[100];
-    ssize_t bytes_read = read(child_info.pipe_fd[0], buffer, sizeof(buffer) -1);
+    ssize_t bytes_read = read(child_info.pipe_fd_to_child[0], buffer, sizeof(buffer) -1);
     if (bytes_read > 0){
         buffer[bytes_read] = '\0';
         memcpy(child_info.message, buffer, sizeof(child_info.message));
@@ -189,16 +215,59 @@ void write_to_file() {
         cleanup();
         exit(1);
     }
+    notify_parent_done();
     if(child_info.number < children_amount - 1){
         sem_post(children_locks[child_info.number + 1]);
     }
 }
 
-void wait_for_children() {
-    for (int i = 0; i < children_amount; i++) {
-        wait(NULL);
+void notify_parent_done() {
+    const char* done_message = "done";
+    if (write(child_info.pipe_fd_to_parent[1], done_message, strlen(done_message)) == -1) {
+        perror("Error writing 'done' message to pipe");
+        cleanup();
+        exit(1);
     }
 }
+
+
+void wait_for_children_response() {
+    fd_set readfds;  // Set of file descriptors to monitor
+    int max_fd = 0;  // To track the highest file descriptor number
+
+    for (int i = 0; i < children_amount; i++) {
+        if (parent_pipes[i][0] > max_fd) {
+            max_fd = parent_pipes[i][0];
+        }
+    }
+
+    int remaining_children = children_amount;  // Track remaining children
+    while (remaining_children > 0) {
+        FD_ZERO(&readfds);
+        for (int i = 0; i < children_amount; i++) {
+            FD_SET(parent_pipes[i][0], &readfds);
+        }
+
+        int result = select(max_fd + 1, &readfds, NULL, NULL, NULL);
+        if (result == -1) {
+            perror("select failed");
+            exit(1);
+        }
+
+        for (int i = 0; i < children_amount; i++) {
+            if (FD_ISSET(parent_pipes[i][0], &readfds)) {
+                char buffer[100];
+                ssize_t bytes_read = read(parent_pipes[i][0], buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0';  // Null-terminate the string
+                    printf("Child %d is done: %s\n", i, buffer);
+                    remaining_children--;  // Decrease the number of remaining children
+                }
+            }
+        }
+    }
+}
+
 
 void cleanup() {
     if (children_locks) {
@@ -235,6 +304,17 @@ void cleanup() {
         }
         free(children_pipes);
         children_pipes = NULL;
+    }
+    if (parent_pipes) {
+        for (int i = 0; i < children_amount; i++) {
+            if (parent_pipes[i]) {
+                close(parent_pipes[i][0]); // Close read end
+                close(parent_pipes[i][1]); // Close write end
+                free(parent_pipes[i]);
+            }
+        }
+        free(parent_pipes);
+        parent_pipes = NULL;
     }
     if (fd != -1) {
         close(fd);

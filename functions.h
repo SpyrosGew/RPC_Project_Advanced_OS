@@ -16,6 +16,7 @@ void file_opener(char* file_name);
 int child_creation();
 void send_massage_to_child(int child_number);
 void write_to_file();
-void wait_for_children();
+void wait_for_children_response();
+void notify_parent_done();
 void cleanup();
 #endif //FUNCTIONS_H
