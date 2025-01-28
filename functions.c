@@ -21,9 +21,8 @@ typedef struct {
 } Child_info;
 
 Child_info child_info;
-
-int **children_pipes; //child read from these
-int **parent_pipes; //parent read from these
+int **children_pipes = NULL; //child read from these
+int **parent_pipes = NULL;//parent read from these
 sem_t **children_locks = NULL;
 sem_t **message_locks = NULL;
 int fd = 0;
@@ -68,7 +67,6 @@ void initializeChildSemaphores() {
         }
     }
 }
-
 
 void initialize_message_semaphores(){
     message_locks = malloc(sizeof(sem_t *) * children_amount);
@@ -121,7 +119,6 @@ void initialize_pipes() {
     }
 }
 
-
 void file_opener(char* filename) {
     fd = open(filename, O_CREAT | O_RDWR | O_TRUNC, 0644);
     if (fd == -1) {
@@ -161,7 +158,7 @@ int child_creation(){
         }else if(pid == 0){
             return child_number; 
         }else{ 
-            send_message_to_child(child_number);
+            send_message_to_child(child_number); //this might be difficult but it outside the fork
         }           
     }
     return -1; //parent returns -1
@@ -184,11 +181,14 @@ void initialize_child_info(int child_number) {
         free(children_pipes[i]); // Free pipe memory
         free(parent_pipes[i]);
     }
+    free(children_locks);
     free(children_pipes); // Free the inhereted stuff
     free(parent_pipes);
     free(message_locks);
     message_locks = NULL;
+    children_locks = NULL;
     children_pipes = NULL;
+    parent_pipes = NULL;
 }
 
 void update_child_info(){
@@ -216,9 +216,6 @@ void write_to_file() {
         exit(1);
     }
     notify_parent_done();
-    if(child_info.number < children_amount - 1){
-        sem_post(children_locks[child_info.number + 1]);
-    }
 }
 
 void notify_parent_done() {
@@ -230,7 +227,6 @@ void notify_parent_done() {
     }
 }
 
-
 void wait_for_children_response() {
     fd_set readfds;  // Set of file descriptors to monitor
     int max_fd = 0;  // To track the highest file descriptor number
@@ -240,7 +236,6 @@ void wait_for_children_response() {
             max_fd = parent_pipes[i][0];
         }
     }
-
     int remaining_children = children_amount;  // Track remaining children
     while (remaining_children > 0) {
         FD_ZERO(&readfds);
@@ -261,13 +256,15 @@ void wait_for_children_response() {
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';  // Null-terminate the string
                     printf("Child %d is done: %s\n", i, buffer);
+                    if(i < children_amount - 1){
+                        sem_post(children_locks[i + 1]);
+                    }
                     remaining_children--;  // Decrease the number of remaining children
                 }
             }
         }
     }
 }
-
 
 void cleanup() {
     if (children_locks) {
