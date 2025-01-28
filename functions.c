@@ -25,6 +25,28 @@ int **parent_pipes = NULL;//parent read from these
 sem_t **children_locks = NULL;
 int fd = 0;
 int children_amount = 0;
+pid_t *child_pids = NULL;  // Array to store child PIDs
+
+// SIGINT Handler: Terminates all children before exiting
+void handle_sigint(int sig) {
+    printf("\n[Parent] SIGINT received. Terminating all children...\n");
+    for (int i = 0; i < children_amount; i++) {
+        if (child_pids[i] > 0) {
+            kill(child_pids[i], SIGTERM);
+        }
+    }
+    while (wait(NULL) > 0); // Wait for all children to terminate
+    printf("[Parent] All children terminated. Exiting.\n");
+    cleanup();
+    exit(0);
+}
+
+// SIGTERM handler for child
+void handle_sigterm(int sig) {
+    printf("[Child %d] Terminating due to SIGTERM.\n", child_info.number);
+    cleanup();
+    exit(0);
+}
 
 void check_CLI_args(int argc, char* argv[]) {
     if (argc != 3) {
@@ -44,6 +66,12 @@ void set_children_amount(int amount){
        exit(1); 
     }
     children_amount = amount;
+    child_pids = malloc(children_amount * sizeof(pid_t)); //child pids array for killing the children after signal
+    if (!child_pids) {
+        perror("Memory allocation failed");
+        cleanup();
+        exit(1);
+    }
 }
 
 void initializeChildSemaphores() {
@@ -68,30 +96,19 @@ void initializeChildSemaphores() {
 
 void initialize_pipes() {
     children_pipes = malloc(children_amount * sizeof(int *));
-    if (!children_pipes) {
-        perror("Memory allocation failed for children_pipes");
-        cleanup(); // Ensure cleanup if allocation fails
+    parent_pipes = malloc(children_amount * sizeof(int *));
+    if (!children_pipes || !parent_pipes) {
+        perror("Memory allocation failed for pipes");
+        cleanup();
         exit(1);
     }
     for (int i = 0; i < children_amount; i++) {
         children_pipes[i] = malloc(2 * sizeof(int));
-        if (!children_pipes[i] || pipe(children_pipes[i]) == -1) {
-            perror("Error creating pipes");
-            cleanup(); // Ensure cleanup if pipe creation fails
-            exit(1);
-        }
-    }
-    parent_pipes = malloc(children_amount * sizeof(int *));
-    if (!parent_pipes) {
-        perror("Memory allocation failed for parent_pipes");
-        cleanup(); // Ensure cleanup if allocation fails
-        exit(1);
-    }
-    for (int i = 0; i < children_amount; i++) {
         parent_pipes[i] = malloc(2 * sizeof(int));
-        if (!parent_pipes[i] || pipe(parent_pipes[i]) == -1) {
+        if (!children_pipes[i] || !parent_pipes[i] ||
+            pipe(children_pipes[i]) == -1 || pipe(parent_pipes[i]) == -1) {
             perror("Error creating pipes");
-            cleanup(); // Ensure cleanup if pipe creation fails
+            cleanup();
             exit(1);
         }
     }
@@ -133,9 +150,11 @@ int child_creation(){
             cleanup();
             exit(1);
         }else if(pid == 0){
+            signal(SIGTERM, handle_sigterm);
             return child_number; 
-        }else{ 
-            send_message_to_child(child_number); //this might be difficult but it outside the fork
+        }else{
+            child_pids[child_number] = pid; 
+            send_message_to_child(child_number); //this might be difficult b9 ut it outside the fork
         }           
     }
     return -1; //parent returns -1

@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include "functions.h"
 
 int main(int argc, char* argv[]) {
     check_CLI_args(argc, argv);
+    signal(SIGINT, handle_sigint);
 
     int children_amount = (int) strtol(argv[2], NULL, 10);
     char* filename = argv[1];

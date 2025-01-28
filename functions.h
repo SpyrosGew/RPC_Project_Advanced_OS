@@ -5,6 +5,7 @@
 #ifndef FUNCTIONS_H
 #define FUNCTIONS_H
 
+void handle_sigint(int sig);
 void set_children_amount(int amount);
 void initializeChildSemaphores();
 void initialize_message_semaphores();
