@@ -165,79 +165,77 @@ void initialize_child_info(int child_number) {
     parent_pipes = NULL;
 }
 
-void update_child_info(){
-    char buffer[100];
-    ssize_t bytes_read = read(child_info.pipe_fd_to_child[0], buffer, sizeof(buffer) -1);
-    if (bytes_read > 0){
-        buffer[bytes_read] = '\0';
-        memcpy(child_info.message, buffer, sizeof(child_info.message));
-    }else{
-        perror("Error reading from pipe");
-        cleanup();
-        exit(1);
+ void child_loop(){
+    while(1){
+        char task_buffer[100];
+        ssize_t bytes_read = read(child_info.pipe_fd_to_child[0], task_buffer, sizeof(task_buffer) - 1);
+        if (bytes_read <= 0) {
+            break;  // Exit loop on pipe close or error
+        }
+        task_buffer[bytes_read] = '\0';
+        if (strcmp(task_buffer, "terminate") == 0) {
+            printf("[Child %d] Terminating\n", child_info.number);
+            break;
+        }
+        printf("[Child %d] Received task: %s\n", child_info.number, task_buffer);
+        char result[100];
+        snprintf(result, sizeof(result), "[Child %d] Completed: %s", child_info.number, task_buffer);
+        // Truncation is acceptable in this context
+        if (write(child_info.pipe_fd_to_parent[1], result, strlen(result)) == -1) {
+            perror("Error writing result to parent");
+            break;
+        }
     }
-    memcpy(child_info.name, strchr(child_info.message, '<'), sizeof(child_info.name));
-}
+ }
 
-void write_to_file() {
-    sem_wait(child_info.children_lock);
-    char message[100];
-    snprintf(message, sizeof(message), "<%d> -> %s\n", child_info.pid, child_info.name);
-    if(write(fd, message, strlen(message)) == -1){
-        perror("Error writing to file");
-        cleanup();
-        exit(1);
-    }
-    notify_parent_done();
-}
-
-void notify_parent_done() {
-    const char* done_message = "done";
-    if (write(child_info.pipe_fd_to_parent[1], done_message, strlen(done_message)) == -1) {
-        perror("Error writing 'done' message to pipe");
-        cleanup();
-        exit(1);
-    }
-}
-
-void wait_for_children_response() {
-    fd_set readfds;  // Set of file descriptors to monitor
-    int max_fd = 0;  // To track the highest file descriptor number
-
+void parent_task_management(char** tasks, int task_count) {
+    int remaining_tasks = task_count;
+    int remaining_children = children_amount;
+    int task_index = 0;
+    fd_set readfds;
+    int max_fd = 0;
     for (int i = 0; i < children_amount; i++) {
         if (parent_pipes[i][0] > max_fd) {
             max_fd = parent_pipes[i][0];
         }
     }
-    int remaining_children = children_amount;  // Track remaining children
-    while (remaining_children > 0) {
+    while (remaining_tasks > 0 || remaining_children > 0) {
         FD_ZERO(&readfds);
         for (int i = 0; i < children_amount; i++) {
             FD_SET(parent_pipes[i][0], &readfds);
         }
-
         int result = select(max_fd + 1, &readfds, NULL, NULL, NULL);
         if (result == -1) {
             perror("select failed");
+            cleanup();
             exit(1);
         }
-
         for (int i = 0; i < children_amount; i++) {
             if (FD_ISSET(parent_pipes[i][0], &readfds)) {
                 char buffer[100];
                 ssize_t bytes_read = read(parent_pipes[i][0], buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
-                    buffer[bytes_read] = '\0';  // Null-terminate the string
-                    printf("Child %d is done: %s\n", i, buffer);
-                    if(i < children_amount - 1){
-                        sem_post(children_locks[i + 1]);
+                    buffer[bytes_read] = '\0';
+                    printf("Parent received: %s\n", buffer);
+                    if (task_index < task_count) {
+                        printf("Assigning new task to child %d: %s\n", i, tasks[task_index]);
+                        if (write(children_pipes[i][1], tasks[task_index], strlen(tasks[task_index])) == -1) {
+                            perror("Error writing task to child");
+                        }
+                        task_index++;
+                    } else {
+                        remaining_children--;
+                        if (write(children_pipes[i][1], "terminate", 9) == -1) {
+                            perror("Error sending termination signal");
+                        }
                     }
-                    remaining_children--;  // Decrease the number of remaining children
+                    remaining_tasks--;
                 }
             }
         }
     }
 }
+
 
 void cleanup() {
     if (children_locks) {

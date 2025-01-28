@@ -9,14 +9,12 @@ void set_children_amount(int amount);
 void initializeChildSemaphores();
 void initialize_message_semaphores();
 void initialize_child_info();
-void update_child_info();
 void initialize_pipes();
 void check_CLI_args(int argc, char* argv[]);
 void file_opener(char* file_name);
 int child_creation();
+void child_loop();
 void send_massage_to_child(int child_number);
-void write_to_file();
-void wait_for_children_response();
-void notify_parent_done();
+void parent_task_management(char** tasks, int task_count);
 void cleanup();
 #endif //FUNCTIONS_H

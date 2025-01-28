@@ -8,19 +8,26 @@ int main(int argc, char* argv[]) {
 
     int children_amount = (int) strtol(argv[2], NULL, 10);
     char* filename = argv[1];
+    char* tasks[] = {
+        "Task 1: Process data",
+        "Task 2: Analyze input",
+        "Task 3: Generate report",
+        "Task 4: Send email"
+    };
 
+    int task_count = sizeof(tasks) / sizeof(tasks[0]);
     set_children_amount(children_amount);
     initializeChildSemaphores();
     initialize_pipes();
     file_opener(filename);
     int child_number = child_creation();
     if (child_number == -1) {
-        wait_for_children_response();
+        parent_task_management(tasks, task_count);
         cleanup();
     } else {
         initialize_child_info(child_number);
-        update_child_info();
-        write_to_file();
+        child_loop();
+        cleanup();
         exit(0); // Ensure child exits after writing
     }
     return 0;
