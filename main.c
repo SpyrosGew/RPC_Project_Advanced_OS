@@ -11,7 +11,6 @@ int main(int argc, char* argv[]) {
 
     set_children_amount(children_amount);
     initializeChildSemaphores();
-    initialize_message_semaphores();
     initialize_pipes();
     file_opener(filename);
     int child_number = child_creation();

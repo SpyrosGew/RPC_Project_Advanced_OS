@@ -16,7 +16,6 @@ typedef struct {
     char name[20];
     char message[100];
     sem_t *children_lock;
-    sem_t *message_lock;
     int number;
 } Child_info;
 
@@ -24,7 +23,6 @@ Child_info child_info;
 int **children_pipes = NULL; //child read from these
 int **parent_pipes = NULL;//parent read from these
 sem_t **children_locks = NULL;
-sem_t **message_locks = NULL;
 int fd = 0;
 int children_amount = 0;
 
@@ -61,26 +59,6 @@ void initializeChildSemaphores() {
         sem_unlink(sem_name);
         children_locks[i] = sem_open(sem_name, O_CREAT | O_EXCL, 0644, (i == 0) ? 1 : 0);
         if (children_locks[i] == SEM_FAILED) {
-            perror("Error creating semaphore");
-            cleanup();
-            exit(1);
-        }
-    }
-}
-
-void initialize_message_semaphores(){
-    message_locks = malloc(sizeof(sem_t *) * children_amount);
-    if(!message_locks){
-        perror("Memory allocation failed");
-        cleanup();
-        exit(1);
-    }
-    for(int i = 0; i <children_amount; i++){
-        char sem_name[35];
-        snprintf(sem_name, sizeof(sem_name), "message_await_lock_child_%d", i);
-        sem_unlink(sem_name);
-        message_locks[i] = sem_open(sem_name, O_CREAT | O_EXCL, 0644, 0);
-        if(message_locks[i] == SEM_FAILED){
             perror("Error creating semaphore");
             cleanup();
             exit(1);
@@ -145,7 +123,6 @@ void send_message_to_child(int child_number){
         cleanup();
         exit(1);
     }
-    sem_post(message_locks[child_number]);
 }
 
 int child_creation(){
@@ -169,7 +146,6 @@ void initialize_child_info(int child_number) {
     memcpy(child_info.pipe_fd_to_parent, parent_pipes[child_number], sizeof(child_info.pipe_fd_to_parent));
     child_info.pid = getpid();
     child_info.children_lock = children_locks[child_number];
-    child_info.message_lock = message_locks[child_number];
     child_info.number = child_number;
     for (int i = 0; i < children_amount; i++) {
         if (i != child_number) {
@@ -184,15 +160,12 @@ void initialize_child_info(int child_number) {
     free(children_locks);
     free(children_pipes); // Free the inhereted stuff
     free(parent_pipes);
-    free(message_locks);
-    message_locks = NULL;
     children_locks = NULL;
     children_pipes = NULL;
     parent_pipes = NULL;
 }
 
 void update_child_info(){
-    sem_wait(child_info.message_lock);
     char buffer[100];
     ssize_t bytes_read = read(child_info.pipe_fd_to_child[0], buffer, sizeof(buffer) -1);
     if (bytes_read > 0){
@@ -279,18 +252,6 @@ void cleanup() {
         free(children_locks);
         children_locks = NULL;
     }
-    if (message_locks) {
-        for (int i = 0; i < children_amount; i++) {
-            if (message_locks[i]) {
-                sem_close(message_locks[i]);
-                char sem_name[35];
-                snprintf(sem_name, sizeof(sem_name), "message_await_lock_child_%d", i);
-                sem_unlink(sem_name);
-            }
-        }
-        free(message_locks);
-        message_locks = NULL;
-    }
     if (children_pipes) {
         for (int i = 0; i < children_amount; i++) {
             if (children_pipes[i]) {
@@ -318,4 +279,4 @@ void cleanup() {
         fd = -1;
     }
     printf("Resources cleaned up successfully.\n");
-}
+} 
